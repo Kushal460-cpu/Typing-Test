@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Typing Practice Tool</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f4f4f4;
+      margin: 0;
+      padding: 0;
+    }
+    .container {
+      width: 90%;
+      max-width: 900px;
+      margin: auto;
+      padding: 20px;
+    }
+    .box {
+      background: white;
+      padding: 20px;
+      border-radius: 10px;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+      margin-bottom: 20px;
+    }
+    input[type="text"], select, textarea {
+      width: 100%;
+      padding: 10px;
+      margin-top: 10px;
+      margin-bottom: 10px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+    }
+    button {
+      padding: 10px 20px;
+      margin: 5px;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    .btn-primary { background: #007bff; color: white; }
+    .btn-danger { background: #dc3545; color: white; }
+    .btn-info { background: #17a2b8; color: white; }
+    .highlight-correct { color: green; }
+    .highlight-incorrect { color: red; }
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: rgba(0,0,0,0.5);
+      justify-content: center;
+      align-items: center;
+    }
+    .modal-content {
+      background: white;
+      padding: 20px;
+      border-radius: 10px;
+      width: 80%;
+      max-width: 500px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div id="login-page" class="box">
+      <h2>Login</h2>
+      <input id="username" type="text" placeholder="Enter your name" required>
+      <button id="login-button" class="btn-primary">Login</button>
+    </div>
+
+    <div id="typing-interface-container" style="display: none;">
+      <div class="box">
+        <h2 id="greeting"></h2>
+        <select id="paragraph-select"></select>
+        <p id="passage"></p>
+        <textarea id="typing-input" placeholder="Type here..." rows="10"></textarea>
+        <div>
+          <button id="end-test" class="btn-danger">End Test</button>
+          <button id="reset-test" class="btn-primary">Reset Test</button>
+          <button id="stats-button" class="btn-info">View Statistics</button>
+        </div>
+      </div>
+      <div class="box">
+        <h2>Stats</h2>
+        <p>WPM: <span id="wpm">0</span></p>
+        <p>Accuracy: <span id="accuracy">0%</span></p>
+        <p>Errors: <span id="errors">0</span></p>
+        <p>Time: <span id="time-elapsed">0</span> seconds</p>
+      </div>
+    </div>
+  </div>
+
+  <div id="stats-modal" class="modal">
+    <div class="modal-content">
+      <h2>Statistics</h2>
+      <p>WPM: <span id="modal-wpm"></span></p>
+      <p>Accuracy: <span id="modal-accuracy"></span></p>
+      <p>Errors: <span id="modal-errors"></span></p>
+      <p>Time: <span id="modal-time-elapsed"></span> seconds</p>
+      <button id="close-modal" class="btn-primary">Close</button>
+    </div>
+  </div>
+
+  <!-- Hidden form to submit data -->
+  <form id="results-form" action="database.php" method="POST" style="display: none;">
+    <input type="hidden" name="username" id="form-username">
+    <input type="hidden" name="wpm" id="form-wpm">
+    <input type="hidden" name="accuracy" id="form-accuracy">
+    <input type="hidden" name="errors" id="form-errors">
+    <input type="hidden" name="time_elapsed" id="form-time-elapsed">
+  </form>
+
+  <script>
+    const paragraphs = [
+      "The database is a collection of inter-related data which is used to retrieve, insert and delete the data efficiently. It is also used to organize the data in the form of a table, schema, views, and reports, etc. For example, The college Database organizes the data about the admin, staff, students and faculty etc.",
+      "Database management system is a software which is used to manage the database. For example: MySQL, Oracle, etc are a very popular commercial database which is used in different applications. DBMS provides an interface to perform various operations like database creation, storing data in it, updating data, creating a table in the database and a lot more. It provides protection and security to the database. In the case of multiple users, it also maintains data consistency."
+    ];
+
+    const paragraphSelect = document.getElementById('paragraph-select');
+    const passage = document.getElementById('passage');
+    const typingInput = document.getElementById('typing-input');
+    const wpmDisplay = document.getElementById('wpm');
+    const accuracyDisplay = document.getElementById('accuracy');
+    const errorsDisplay = document.getElementById('errors');
+    const timeElapsedDisplay = document.getElementById('time-elapsed');
+    const modalWpmDisplay = document.getElementById('modal-wpm');
+    const modalAccuracyDisplay = document.getElementById('modal-accuracy');
+    const modalErrorsDisplay = document.getElementById('modal-errors');
+    const modalTimeElapsedDisplay = document.getElementById('modal-time-elapsed');
+
+    let correct = 0, incorrect = 0, startTime = null, timer = null, username = '';
+
+    paragraphs.forEach((para, i) => {
+      let option = document.createElement('option');
+      option.value = para;
+      option.textContent = `Paragraph ${i + 1}`;
+      paragraphSelect.appendChild(option);
+    });
+
+    paragraphSelect.addEventListener('change', () => {
+      resetTest();
+      passage.textContent = paragraphSelect.value;
+    });
+
+    typingInput.addEventListener('input', () => {
+      if (!startTime) {
+        startTime = new Date();
+        timer = setInterval(updateStats, 100);
+      }
+      correct = incorrect = 0;
+      let input = typingInput.value;
+      let passageText = paragraphSelect.value;
+      let html = '';
+      for (let i = 0; i < passageText.length; i++) {
+        if (i < input.length) {
+          if (input[i] === passageText[i]) {
+            html += `<span class="highlight-correct">${passageText[i]}</span>`;
+            correct++;
+          } else {
+            html += `<span class="highlight-incorrect">${passageText[i]}</span>`;
+            incorrect++;
+          }
+        } else {
+          html += passageText[i];
+        }
+      }
+      passage.innerHTML = html;
+    });
+
+    function updateStats() {
+      const elapsed = (new Date() - startTime) / 1000;
+      const words = correct / 5;
+      const wpm = Math.round(words / (elapsed / 60));
+      const accuracy = Math.round((correct / (correct + incorrect)) * 100) || 0;
+      wpmDisplay.textContent = wpm;
+      accuracyDisplay.textContent = `${accuracy}%`;
+      errorsDisplay.textContent = incorrect;
+      timeElapsedDisplay.textContent = elapsed.toFixed(2);
+    }
+
+    document.getElementById('end-test').addEventListener('click', () => {
+      clearInterval(timer);
+      updateStats();
+      sendResultsToServer();
+    });
+
+    document.getElementById('reset-test').addEventListener('click', () => {
+      resetTest();
+    });
+
+    function resetTest() {
+      clearInterval(timer);
+      correct = incorrect = 0;
+      startTime = null;
+      typingInput.value = '';
+      wpmDisplay.textContent = '0';
+      accuracyDisplay.textContent = '0%';
+      errorsDisplay.textContent = '0';
+      timeElapsedDisplay.textContent = '0';
+      passage.textContent = paragraphSelect.value;
+    }
+
+    document.getElementById('stats-button').addEventListener('click', () => {
+      modalWpmDisplay.textContent = wpmDisplay.textContent;
+      modalAccuracyDisplay.textContent = accuracyDisplay.textContent;
+      modalErrorsDisplay.textContent = errorsDisplay.textContent;
+      modalTimeElapsedDisplay.textContent = timeElapsedDisplay.textContent;
+      document.getElementById('stats-modal').style.display = 'flex';
+    });
+
+    document.getElementById('close-modal').addEventListener('click', () => {
+      document.getElementById('stats-modal').style.display = 'none';
+    });
+
+    document.getElementById('login-button').addEventListener('click', () => {
+      username = document.getElementById('username').value;
+      if (username) {
+        document.getElementById('login-page').style.display = 'none';
+        document.getElementById('typing-interface-container').style.display = 'block';
+        document.getElementById('greeting').textContent = `Welcome, ${username}!`;
+        paragraphSelect.selectedIndex = 0;
+        passage.textContent = paragraphSelect.value;
+      }
+    });
+
+    function sendResultsToServer() {
+      document.getElementById('form-username').value = username;
+      document.getElementById('form-wpm').value = wpmDisplay.textContent;
+      document.getElementById('form-accuracy').value = accuracyDisplay.textContent.replace('%', '');
+      document.getElementById('form-errors').value = errorsDisplay.textContent;
+      document.getElementById('form-time-elapsed').value = timeElapsedDisplay.textContent;
+      document.getElementById('results-form').submit();
+    }
+  </script>
+</body>
+</html>
